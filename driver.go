@@ -9,8 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -22,51 +20,34 @@ const (
 	VolumeFileMode  = 0600
 )
 
-type sshfsVolume struct {
+type s3fsVolume struct {
 	Name			string
 	MountPoint		string
 	CreatedAt		string
-	RefCount 		int
-	// sshfs options
+	RefCount		int
+	// s3fs options
 	Options			[]string
-	SSHCmd			string
-	IdentityFile	string
-	OneTime 		bool
-	Password		string
-	Port			string
+	Bucket			string
+	AccessKeyID	    string
+	SecretAccessKey string
 }
 
-type sshfsDriver struct {
+type s3fsDriver struct {
 	mutex			*sync.Mutex
-	volumes			map[string]*sshfsVolume
+	volumes			map[string]*s3fsVolume
 	volumePath		string
 	statePath		string
 }
 
-func (v *sshfsVolume) setupOptions(options map[string]string) error {
+func (v *s3fsVolume) setupOptions(options map[string]string) error {
 	for key, val := range options {
 		switch key {
-		case "sshcmd":
-			v.SSHCmd = val
-		case "password":
-			v.Password = val
-		case "port":
-			v.Port = val
-		case "IdentityFile":
-			v.IdentityFile = val
-		case "id_rsa":
-			if val != "" {
-				v.IdentityFile = v.MountPoint + "_id_rsa"
-				if err := v.saveKey(val); err != nil {
-					return err
-				}
-			}
-		case "one_time":
-			parsedBool, err := strconv.ParseBool(val)
-			if err != nil {
-				return err
-			}
-			v.OneTime = parsedBool
+		case "bucket":
+			v.Bucket = val
+		case "access_key_id":
+			v.AccessKeyID = val
+		case "secret_access_key":
+			v.SecretAccessKey = val
 		default:
 			if val != "" {
 				v.Options = append(v.Options, key+"="+val)
@@ -76,45 +57,23 @@ func (v *sshfsVolume) setupOptions(options map[string]string) error {
 		}
 	}
 
-	if v.SSHCmd == "" {
-		return fmt.Errorf("'sshcmd' option required")
+	if v.Bucket == "" {
+		return fmt.Errorf("'bucket' option required")
 	}
 
-	if v.Password == "" && v.IdentityFile == "" {
-		return fmt.Errorf("either 'password', 'IdentityFile' or 'id_rsa' option must be set")
-	}
-
-	if v.Password != "" && v.IdentityFile != "" {
-		return fmt.Errorf("'password' and 'IdentityFile'/'id_rsa' options are mutually exclusive")
+	if (v.AccessKeyID == "") != (v.SecretAccessKey == "") {
+		return fmt.Errorf("'access_key_id' and 'secret_access_key' option must be used together")
 	}
 
 	return nil
 }
 
 
-func (v *sshfsVolume) saveKey(key string) error {
-	if key == "" {
-		return fmt.Errorf("an empty key is not alloved")
-	}
-
-	f, err := os.Create(v.IdentityFile)
-	if err != nil {
-		msg := fmt.Sprintf("Failed to create id_rsa file at %s (%s)", v.IdentityFile, err)
-		log.Error(msg)
-		return fmt.Errorf(msg)
-	}
-	f.WriteString(key)
-	f.Chmod(VolumeFileMode)
-	f.Close()
-
-	return nil
-}
-
-func newSshfsDriver(basePath string) (*sshfsDriver, error) {
+func newS3fsDriver(basePath string) (*s3fsDriver, error) {
 	log.Infof("Creating a new driver instance %s", basePath)
 
 	volumePath := filepath.Join(basePath, "volumes")
-	statePath := filepath.Join(basePath, "state", "sshfs-state.json")
+	statePath := filepath.Join(basePath, "state", "s3fs-state.json")
 
 	if verr := os.MkdirAll(volumePath, VolumeDirMode); verr != nil {
 		return nil, verr
@@ -122,8 +81,8 @@ func newSshfsDriver(basePath string) (*sshfsDriver, error) {
 
 	log.Infof("Initialized driver, volumes='%s' state='%s", volumePath, statePath)
 
-	driver := &sshfsDriver{
-		volumes:		make(map[string]*sshfsVolume),
+	driver := &s3fsDriver{
+		volumes:		make(map[string]*s3fsVolume),
 		volumePath:		volumePath,
 		statePath:		statePath,
 		mutex:			&sync.Mutex{},
@@ -144,7 +103,7 @@ func newSshfsDriver(basePath string) (*sshfsDriver, error) {
 	return driver, nil
 }
 
-func (d *sshfsDriver) saveState() {
+func (d *s3fsDriver) saveState() {
 	data, err := json.Marshal(d.volumes)
 	if err != nil {
 		log.Errorf("saveState failed %s", err)
@@ -157,7 +116,7 @@ func (d *sshfsDriver) saveState() {
 }
 
 // Driver API
-func (d *sshfsDriver) Create(r *volume.CreateRequest) error {
+func (d *s3fsDriver) Create(r *volume.CreateRequest) error {
 	log.Debugf("Create Request %s", r)
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -176,7 +135,7 @@ func (d *sshfsDriver) Create(r *volume.CreateRequest) error {
 	return nil
 }
 
-func (d *sshfsDriver) List() (*volume.ListResponse, error) {
+func (d *s3fsDriver) List() (*volume.ListResponse, error) {
 	log.Debugf("List Request")
 
 	var vols = []*volume.Volume{}
@@ -187,7 +146,7 @@ func (d *sshfsDriver) List() (*volume.ListResponse, error) {
 	return &volume.ListResponse{Volumes: vols}, nil
 }
 
-func (d *sshfsDriver) Get(r *volume.GetRequest) (*volume.GetResponse, error) {
+func (d *s3fsDriver) Get(r *volume.GetRequest) (*volume.GetResponse, error) {
 	log.Debugf("Get Request %s", r)
 
 	vol, ok := d.volumes[r.Name]
@@ -201,7 +160,7 @@ func (d *sshfsDriver) Get(r *volume.GetRequest) (*volume.GetResponse, error) {
 		&volume.Volume{Name: vol.Name, Mountpoint: vol.MountPoint}}, nil
 }
 
-func (d *sshfsDriver) Remove(r *volume.RemoveRequest) error {
+func (d *s3fsDriver) Remove(r *volume.RemoveRequest) error {
 	log.Debugf("Remove Request %s", r)
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -228,7 +187,7 @@ func (d *sshfsDriver) Remove(r *volume.RemoveRequest) error {
 	return nil
 }
 
-func (d *sshfsDriver) Path(r *volume.PathRequest) (*volume.PathResponse, error) {
+func (d *s3fsDriver) Path(r *volume.PathRequest) (*volume.PathResponse, error) {
 	log.Debugf("Path Request %s", r)
 	vol, ok := d.volumes[r.Name]
 	if !ok {
@@ -240,7 +199,7 @@ func (d *sshfsDriver) Path(r *volume.PathRequest) (*volume.PathResponse, error) 
 	return &volume.PathResponse{Mountpoint: vol.MountPoint}, nil
 }
 
-func (d *sshfsDriver) Mount(r *volume.MountRequest) (*volume.MountResponse, error) {
+func (d *s3fsDriver) Mount(r *volume.MountRequest) (*volume.MountResponse, error) {
 	log.Debugf("Mount Request %s", r)
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -253,7 +212,7 @@ func (d *sshfsDriver) Mount(r *volume.MountRequest) (*volume.MountResponse, erro
 	}
 
 	if vol.RefCount == 0 {
-		log.Debugf("First volume mount %s establish connection to %s", vol.Name, vol.SSHCmd)
+		log.Debugf("First volume mount %s establish connection to %s", vol.Name, vol.Bucket)
 		if err := d.mountVolume(vol); err != nil {
 			msg := fmt.Sprintf("Failed to mount %s, %s", vol.Name, err)
 			log.Error(msg)
@@ -265,7 +224,7 @@ func (d *sshfsDriver) Mount(r *volume.MountRequest) (*volume.MountResponse, erro
 	return &volume.MountResponse{Mountpoint: vol.MountPoint}, nil
 }
 
-func (d *sshfsDriver) Unmount(r *volume.UnmountRequest) error {
+func (d *s3fsDriver) Unmount(r *volume.UnmountRequest) error {
 	log.Debugf("Umount Request %s", r)
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -288,14 +247,14 @@ func (d *sshfsDriver) Unmount(r *volume.UnmountRequest) error {
 	return nil
 }
 
-func (d *sshfsDriver) Capabilities() *volume.CapabilitiesResponse {
+func (d *s3fsDriver) Capabilities() *volume.CapabilitiesResponse {
 	log.Debugf("Capabilities Request")
 	return &volume.CapabilitiesResponse{Capabilities: volume.Capability{Scope: "global"}}
 }
 
 // Helper methods
 
-func (d *sshfsDriver) newVolume(name string) (*sshfsVolume, error) {
+func (d *s3fsDriver) newVolume(name string) (*s3fsVolume, error) {
 	path := filepath.Join(d.volumePath, name)
 	err := os.MkdirAll(path, VolumeDirMode)
 	if err != nil {
@@ -304,26 +263,17 @@ func (d *sshfsDriver) newVolume(name string) (*sshfsVolume, error) {
 		return nil, fmt.Errorf(msg)
 	}
 
-	vol := &sshfsVolume{
+	vol := &s3fsVolume{
 		Name: name,
 		MountPoint: path,
 		CreatedAt: time.Now().Format(time.RFC3339Nano),
-		OneTime: false,
 		RefCount: 0,
 	}
 	return vol, nil
 }
 
-func (d *sshfsDriver) removeVolume(vol *sshfsVolume) error {
+func (d *s3fsDriver) removeVolume(vol *s3fsVolume) error {
 	// Remove id_rsa
-	if vol.IdentityFile != "" && vol.OneTime {
-		if err := os.Remove(vol.IdentityFile); err != nil {
-			msg := fmt.Sprintf("Failed to remove the volume %s id_rsa %s (%s)", vol.Name, vol.MountPoint, err)
-			log.Error(msg)
-			return fmt.Errorf(msg)
-		}
-	}
-
 	// Remove MountPoint
 	if  err := os.Remove(vol.MountPoint); err != nil {
 		msg := fmt.Sprintf("Failed to remove the volume %s mountpoint %s (%s)", vol.Name, vol.MountPoint, err)
@@ -334,20 +284,14 @@ func (d *sshfsDriver) removeVolume(vol *sshfsVolume) error {
 	return nil
 }
 
-func (d *sshfsDriver) mountVolume(vol *sshfsVolume) error {
-	cmd := exec.Command("sshfs", "-oStrictHostKeyChecking=no", vol.SSHCmd, vol.MountPoint)
+func (d *s3fsDriver) mountVolume(vol *s3fsVolume) error {
+	cmd := exec.Command("s3fs", vol.Bucket, vol.MountPoint)
 
-	if vol.Port != "" {
-		cmd.Args = append(cmd.Args, "-p", vol.Port)
-	}
-
-	if vol.Password != "" {
-		cmd.Args = append(cmd.Args, "-o", "workaround=rename", "-o", "password_stdin")
-		cmd.Stdin = strings.NewReader(vol.Password)
-	}
-
-	if vol.IdentityFile != "" {
-		cmd.Args = append(cmd.Args, "-o", "IdentityFile=" + vol.IdentityFile)
+	if vol.AccessKeyID != "" {
+		cmd.Env = append(os.Environ(),
+                "AWSACCESSKEYID="+vol.AccessKeyID,
+                "AWSSECRETACCESSKEY="+vol.SecretAccessKey,
+            )
 	}
 
 	// Append the rest
@@ -359,13 +303,13 @@ func (d *sshfsDriver) mountVolume(vol *sshfsVolume) error {
 	log.Debugf("Executing mount command %v", cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("sshfs command failed %v (%s)", err, output)
+		return fmt.Errorf("s3fs command failed %v (%s)", err, output)
 	}
 
 	return nil
 }
 
-func (d *sshfsDriver) unmountVolume(vol *sshfsVolume) error {
+func (d *s3fsDriver) unmountVolume(vol *s3fsVolume) error {
 	cmd := fmt.Sprintf("umount %s", vol.MountPoint)
 	if err := exec.Command("sh", "-c", cmd).Run(); err != nil {
 		return err

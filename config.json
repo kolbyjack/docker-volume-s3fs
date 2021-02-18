@@ -1,9 +1,9 @@
 {
-  "description": "sshFS plugin for Docker",
+  "description": "s3fs plugin for Docker",
   "documentation": "https://docs.docker.com/engine/extend/plugins/",
   "entrypoint": [
     "/sbin/tini", "--",
-    "/docker-volume-sshfs"
+    "/docker-volume-s3fs"
   ],
   "env": [
     {
@@ -15,7 +15,7 @@
     }
   ],
   "interface": {
-    "socket": "sshfs.sock",
+    "socket": "s3fs.sock",
     "types": [
       "docker.volumedriver/1.0"
     ]
@@ -38,18 +38,6 @@
       ],
       "name": "state",
       "source": "/var/lib/docker/plugins/",
-      "settable": [
-        "source"
-      ],
-      "type": "bind"
-    },
-    {
-      "destination": "/root/.ssh",
-      "options": [
-        "rbind"
-      ],
-      "name": "sshdir",
-      "source": "",
       "settable": [
         "source"
       ],

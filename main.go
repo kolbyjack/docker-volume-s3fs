@@ -11,7 +11,7 @@ const (
 	// DefaultBasePath defines the base path within the docker plugins rootfs file system
 	DefaultBasePath = "/mnt"
 	// DefaultUnixSocket sets the path to the plugin socket
-	DefaultUnixSocket = "/run/docker/plugins/sshfs.sock"
+	DefaultUnixSocket = "/run/docker/plugins/s3fs.sock"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	driver, err := newSshfsDriver(DefaultBasePath)
+	driver, err := newS3fsDriver(DefaultBasePath)
 	if err != nil {
 		log.Errorf("Failed to create the driver %s", err)
 		os.Exit(1)
