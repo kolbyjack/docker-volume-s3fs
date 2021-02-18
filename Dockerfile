@@ -12,11 +12,8 @@ CMD ["/go/bin/docker-volume-s3fs"]
 
 FROM alpine
 RUN echo @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories
-RUN apk add --update s3fs-fuse@testing
+RUN apk add --update tini s3fs-fuse@testing
 RUN mkdir -p /run/docker/plugins /mnt/state /mnt/volumes
 COPY --from=builder /go/bin/docker-volume-s3fs .
-# Tini to reap orphaned child procceses
-# Add Tini
-RUN apk add --update tini
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["docker-volume-s3fs"]

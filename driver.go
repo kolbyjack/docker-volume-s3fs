@@ -28,7 +28,7 @@ type s3fsVolume struct {
 	// s3fs options
 	Options			[]string
 	Bucket			string
-	AccessKeyID	    string
+	AccessKeyID		string
 	SecretAccessKey string
 }
 
@@ -49,7 +49,9 @@ func (v *s3fsVolume) setupOptions(options map[string]string) error {
 		case "secret_access_key":
 			v.SecretAccessKey = val
 		default:
-			if val != "" {
+			if key == "debug" {
+				log.Infof("Ignoring debug option, as it breaks s3fs")
+			} else if val != "" {
 				v.Options = append(v.Options, key+"="+val)
 			} else {
 				v.Options = append(v.Options, key)
@@ -151,7 +153,7 @@ func (d *s3fsDriver) Get(r *volume.GetRequest) (*volume.GetResponse, error) {
 
 	vol, ok := d.volumes[r.Name]
 	if !ok {
-		msg := fmt.Sprintf("Failed to get volume %s because it doesn't exists", r.Name)
+		msg := fmt.Sprintf("Failed to get volume %s because it doesn't exist", r.Name)
 		log.Error(msg)
 		return &volume.GetResponse{}, fmt.Errorf(msg)
 	}
@@ -167,7 +169,7 @@ func (d *s3fsDriver) Remove(r *volume.RemoveRequest) error {
 
 	vol, ok := d.volumes[r.Name]
 	if !ok {
-		msg := fmt.Sprintf("Failed to remove volume %s because it doesn't exists", r.Name)
+		msg := fmt.Sprintf("Failed to remove volume %s because it doesn't exist", r.Name)
 		log.Error(msg)
 		return fmt.Errorf(msg)
 	}
@@ -191,7 +193,7 @@ func (d *s3fsDriver) Path(r *volume.PathRequest) (*volume.PathResponse, error) {
 	log.Debugf("Path Request %s", r)
 	vol, ok := d.volumes[r.Name]
 	if !ok {
-		msg := fmt.Sprintf("Failed to find path for volume %s because it doesn't exists", r.Name)
+		msg := fmt.Sprintf("Failed to find path for volume %s because it doesn't exist", r.Name)
 		log.Error(msg)
 		return &volume.PathResponse{}, fmt.Errorf(msg)
 	}
@@ -206,7 +208,7 @@ func (d *s3fsDriver) Mount(r *volume.MountRequest) (*volume.MountResponse, error
 
 	vol, ok := d.volumes[r.Name]
 	if !ok {
-		msg := fmt.Sprintf("Failed to mount volume %s because it doesn't exists", r.Name)
+		msg := fmt.Sprintf("Failed to mount volume %s because it doesn't exist", r.Name)
 		log.Error(msg)
 		return &volume.MountResponse{}, fmt.Errorf(msg)
 	}
@@ -231,7 +233,7 @@ func (d *s3fsDriver) Unmount(r *volume.UnmountRequest) error {
 
 	vol, ok := d.volumes[r.Name]
 	if !ok {
-		msg := fmt.Sprintf("Failed to unmount volume %s because it doesn't exists", r.Name)
+		msg := fmt.Sprintf("Failed to unmount volume %s because it doesn't exist", r.Name)
 		log.Error(msg)
 		return fmt.Errorf(msg)
 	}
@@ -273,7 +275,6 @@ func (d *s3fsDriver) newVolume(name string) (*s3fsVolume, error) {
 }
 
 func (d *s3fsDriver) removeVolume(vol *s3fsVolume) error {
-	// Remove id_rsa
 	// Remove MountPoint
 	if  err := os.Remove(vol.MountPoint); err != nil {
 		msg := fmt.Sprintf("Failed to remove the volume %s mountpoint %s (%s)", vol.Name, vol.MountPoint, err)
@@ -289,9 +290,9 @@ func (d *s3fsDriver) mountVolume(vol *s3fsVolume) error {
 
 	if vol.AccessKeyID != "" {
 		cmd.Env = append(os.Environ(),
-                "AWSACCESSKEYID="+vol.AccessKeyID,
-                "AWSSECRETACCESSKEY="+vol.SecretAccessKey,
-            )
+				"AWSACCESSKEYID="+vol.AccessKeyID,
+				"AWSSECRETACCESSKEY="+vol.SecretAccessKey,
+			)
 	}
 
 	// Append the rest
