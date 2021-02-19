@@ -12,6 +12,20 @@
         "value"
       ],
       "value": "0"
+    },
+    {
+      "name": "AWSACCESSKEYID",
+      "settable": [
+        "value"
+      ],
+      "value": ""
+    },
+    {
+      "name": "AWSSECRETACCESSKEY",
+      "settable": [
+        "value"
+      ],
+      "value": ""
     }
   ],
   "interface": {

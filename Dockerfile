@@ -15,6 +15,5 @@ RUN echo @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk
 RUN apk add --update tini s3fs-fuse@testing
 RUN mkdir -p /run/docker/plugins /mnt/state /mnt/volumes
 COPY --from=builder /go/bin/docker-volume-s3fs /
-COPY config.json /
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["docker-volume-s3fs"]
