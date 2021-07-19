@@ -10,8 +10,8 @@ CMD ["/go/bin/docker-volume-s3fs"]
 
 FROM alpine
 RUN set -ex \
-    && echo @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories
-    && apk add --update tini s3fs-fuse@testing
+    && echo @testing https://dl-cdn.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories \
+    && apk add --update tini s3fs-fuse@testing \
     && mkdir -p /run/docker/plugins /mnt/state /mnt/volumes
 COPY --from=builder /go/bin/docker-volume-s3fs /
 ENTRYPOINT ["/sbin/tini", "--"]
