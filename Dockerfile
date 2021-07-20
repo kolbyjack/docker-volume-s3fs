@@ -5,7 +5,7 @@ WORKDIR /go/src/github.com/kolbyjack/docker-volume-s3fs
 
 RUN set -ex \
     && apk add --no-cache gcc libc-dev \
-    && go install --ldflags '-extldflags "-static"' \
+    && go install --ldflags '-extldflags "-static"'
 CMD ["/go/bin/docker-volume-s3fs"]
 
 FROM alpine
