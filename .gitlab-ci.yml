@@ -13,9 +13,14 @@ before_script:
 build:
   stage: build
   script:
-    - make rootfs
-    - make PLUGIN_TAG=latest create
-    - make PLUGIN_TAG=$CI_COMMIT_SHORT_SHA create
+    - docker build -q -t "${DOCKER_HUB_IMAGE}:rootfs" .
+    - mkdir -p ./plugin/rootfs
+    - docker create --name tmp "${DOCKER_HUB_IMAGE}:rootfs"
+    - docker export tmp | tar -x -C ./plugin/rootfs
+    - cp config.json ./plugin/
+    - docker rm -vf tmp
+    - docker plugin create "${DOCKER_HUB_IMAGE}:latest" ./plugin
+    - docker plugin create "${DOCKER_HUB_IMAGE}:${CI_COMMIT_SHORT_SHA}" ./plugin
     - docker plugin push "$DOCKER_HUB_IMAGE:latest"
     - docker plugin push "$DOCKER_HUB_IMAGE:$CI_COMMIT_SHORT_SHA"
   only:
